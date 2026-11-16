@@ -4,9 +4,9 @@
 //
 
 import SwiftUI
-import DataCache
 
 struct PlayAppView: View {
+
     @Binding var selectedBackgroundColor: Color
     @Binding var selectedTextColor: Color
     @Binding var selected: PlayApp?
@@ -35,65 +35,38 @@ struct PlayAppView: View {
                 selected = viewModel.app
             })
             .contextMenu {
-                Button(action: {
+                Button("playapp.settings", systemImage: "gear", action: {
                     viewModel.showSettings.toggle()
-                }, label: {
-                    Text("playapp.settings")
                 })
-                Button(action: {
+                Button("playapp.openCache", systemImage: "folder", action: {
                     viewModel.app.openAppCache()
-                }, label: {
-                    Text("playapp.openCache")
                 })
-                Button(action: {
+                Button("playapp.showInFinder", systemImage: "finder", action: {
                     viewModel.app.showInFinder()
-                }, label: {
-                    Text("playapp.showInFinder")
                 })
                 Divider()
                 Group {
-                    Button(action: {
-                        viewModel.app.keymapping.importKeymap { result in
-                            if result {
-                                viewModel.showImportSuccess.toggle()
-                            } else {
-                                viewModel.showImportFail.toggle()
-                            }
-                        }
-                    }, label: {
-                        Text("playapp.importKm")
-                    })
-                    Button(action: {
-                        viewModel.app.keymapping.exportKeymap()
-                    }, label: {
-                        Text("playapp.exportKm")
+                    Button("playapp.keymap", systemImage: "keyboard", action: {
+                        viewModel.showKeymapSheet.toggle()
                     })
                 }
                 Divider()
                 Group {
-                    Button(action: {
+                    Button("playapp.clearCache", systemImage: "clear", action: {
                         selected = nil
                         Task { await Uninstaller.clearCachePopup(viewModel.app) }
-                    }, label: {
-                        Text("playapp.clearCache")
                     })
-                    Button(action: {
+                    Button("playapp.clearPreferences", systemImage: "clear", action: {
                         viewModel.showClearPreferencesAlert.toggle()
-                    }, label: {
-                        Text("playapp.clearPreferences")
                     })
-                    Button(action: {
+                    Button("playapp.clearPlayChain", systemImage: "clear", action: {
                         viewModel.showClearPlayChainAlert.toggle()
-                    }, label: {
-                        Text("playapp.clearPlayChain")
                     })
                 }
                 Divider()
-                Button(action: {
+                Button("playapp.delete", systemImage: "trash", action: {
                     selected = nil
                     Task { await Uninstaller.uninstallPopup(viewModel.app) }
-                }, label: {
-                    Text("playapp.delete")
                 })
             }
             .alert("alert.app.preferences", isPresented: $viewModel.showClearPreferencesAlert) {
@@ -110,18 +83,12 @@ struct PlayAppView: View {
                 }
                 Button("button.Cancel", role: .cancel) { }
             }
-            .onChange(of: viewModel.showImportSuccess) { _ in
-                ToastVM.shared.showToast(
-                    toastType: .notice,
-                    toastDetails: NSLocalizedString("alert.kmImported", comment: ""))
-            }
-            .onChange(of: viewModel.showImportFail) { _ in
-                ToastVM.shared.showToast(
-                    toastType: .error,
-                    toastDetails: NSLocalizedString("alert.errorImportKm", comment: ""))
-            }
             .sheet(isPresented: $viewModel.showSettings) {
-                AppSettingsView(viewModel: AppSettingsVM(app: viewModel.app))
+                AppSettingsView(viewModel: AppSettingsVM(app: viewModel.app),
+                                showKeymapSheet: $viewModel.showKeymapSheet)
+            }
+            .sheet(isPresented: $viewModel.showKeymapSheet) {
+                KeymapView(showKeymapSheet: $viewModel.showKeymapSheet, viewModel: KeymapViewVM(app: viewModel.app))
             }
     }
 
@@ -156,8 +123,6 @@ struct PlayAppConditionalView: View {
     @State var appIcon: NSImage?
     @State var isList: Bool
     @State var hasPlayTools: Bool?
-
-    @State private var cache = DataCache.instance
 
     var body: some View {
         Group {
@@ -260,13 +225,19 @@ struct PlayAppConditionalView: View {
             }
         }
         .task(priority: .userInitiated) {
-            let compareStr = app.info.bundleIdentifier + app.info.bundleVersion
-            if cache.readImage(forKey: app.info.bundleIdentifier) != nil
-                && cache.readString(forKey: compareStr) != nil {
-                appIcon = cache.readImage(forKey: app.info.bundleIdentifier)
-            } else {
-                appIcon = Cacher.shared.resolveLocalIcon(app)
-            }
+            let appURL = app.url
+            let bundleIdentifier = app.info.bundleIdentifier
+            let bundleVersion = app.info.bundleVersion
+            let primaryIconName = app.info.primaryIconName
+            let iconData = await Task.detached(priority: .utility) {
+                Cacher.shared.resolveLocalIconData(
+                    at: appURL,
+                    bundleIdentifier: bundleIdentifier,
+                    bundleVersion: bundleVersion,
+                    primaryIconName: primaryIconName
+                )
+            }.value
+            appIcon = iconData.flatMap(NSImage.init(data:))
         }
         .task(priority: .background) {
             hasPlayTools = app.hasPlayTools()

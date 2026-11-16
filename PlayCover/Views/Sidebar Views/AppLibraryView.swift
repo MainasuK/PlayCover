@@ -20,6 +20,7 @@ struct AppLibraryView: View {
     @State private var showSettings = false
     @State private var showLegacyConvertAlert = false
     @State private var showWrongfileTypeAlert = false
+    @State var showKeymapSheet = false
 
     var body: some View {
         Group {
@@ -84,7 +85,7 @@ struct AppLibraryView: View {
                 .disabled(selected == nil)
             }
             ToolbarItem(placement: .primaryAction) {
-                Picker("Grid View Layout", selection: $isList) {
+                Picker("sidebar.layoutPicker", selection: $isList) {
                     Image(systemName: "square.grid.2x2")
                         .tag(false)
                     Image(systemName: "list.bullet")
@@ -106,7 +107,12 @@ struct AppLibraryView: View {
         })
         .sheet(isPresented: $showSettings) {
             if let selected = selected {
-                AppSettingsView(viewModel: AppSettingsVM(app: selected))
+                AppSettingsView(viewModel: AppSettingsVM(app: selected), showKeymapSheet: $showKeymapSheet)
+            }
+        }
+        .sheet(isPresented: $showKeymapSheet) {
+            if let selected = selected {
+                KeymapView(showKeymapSheet: $showKeymapSheet, viewModel: KeymapViewVM(app: selected))
             }
         }
         .onAppear {
@@ -145,7 +151,7 @@ struct AppLibraryView: View {
             Alert(title: Text("alert.wrongFileType.title"),
                   message: Text("alert.wrongFileType.subtitle"), dismissButton: .default(Text("button.OK")))
         }
-        .alert("Legacy App Settings Detected!", isPresented: $showLegacyConvertAlert, actions: {
+        .alert("alert.legacyImport.title", isPresented: $showLegacyConvertAlert, actions: {
             Button("button.Convert", role: .destructive) {
                 LegacySettings.convertLegacyMonolithPlist(LegacySettings.monolithURL)
                 do {
